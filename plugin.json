@@ -1,29 +1,26 @@
 {
     "id": "nodebb-plugin-katex",
-    "name": "Katex Parser",
-    "description": "Use Katex parser in NodeBB",
-    "url": "https://github.com/benjaminabel/nodebb-plugin-katex",
-    "library": "./lib/index.js",
-    "less": [
-        "./static/less/fonts.less",
-        "./static/less/katex.less"
-    ],
-    "scripts": [
-        "static/js/client.js"
-    ],
-    "acpScripts": [
-        "static/js/admin.js"
-    ],
-    "staticDirs": {
-        "js": "static/js",
-        "fonts": "static/fonts"
-    },
-    "templates": "./static/templates",
+    "name": "KaTeX Math Renderer",
+    "description": "Render LaTeX math expressions with KaTeX in NodeBB posts",
+    "url": "https://github.com/mysteren/nodebb-plugin-katex",
+    "library": "lib/index.js",
     "hooks": [
-        { "hook": "static:app.load", "method": "onLoad" },
-        { "hook": "filter:parse.post", "method": "parsePost"},
-        { "hook": "filter:parse.raw", "method": "parseRaw"},
-        { "hook": "filter:admin.header.build", "method": "admin.menu" },
-        { "hook": "filter:composer.formatting", "method": "registerFormatting", "priority": 5}
-    ]
+        {
+            "hook": "filter:parse.post",
+            "method": "parsePost"
+        },
+        {
+            "hook": "filter:parse.raw",
+            "method": "parseRaw"
+        },
+        {
+            "hook": "static:app.load",
+            "method": "onLoad"
+        }
+    ],
+    "scripts": ["static/js/render.js"],
+    "stylesheets": ["static/css/katex.css"],
+    "staticDirs": {
+        "js": "static/js"
+    }
 }

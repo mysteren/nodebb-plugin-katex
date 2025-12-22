@@ -1,49 +1,113 @@
-[![npm version](https://badge.fury.io/js/nodebb-plugin-katex.svg)](http://badge.fury.io/js/nodebb-plugin-katex)
-[![Dependency Status](https://david-dm.org/benjaminabel/nodebb-plugin-katex.svg)](https://david-dm.org/benjaminabel/nodebb-plugin-katex)
+# KaTeX Math Renderer for NodeBB
 
-# NodeBB Katex Parser
+Современный плагин для поддержки математических выражений KaTeX в NodeBB 4+.
 
-This NodeBB plugin is a parser that allows users to write posts containing maths formulas in tex format using [Katex](Katex).
+## Возможности
 
-To customize options for the parser, please consult the "Katex" page in the administration panel, under the "Plugins" heading.
+- ✨ **Быстрая загрузка** - KaTeX подгружается только когда есть математические выражения на странице
+- 📐 **Полная поддержка синтаксиса** - `$$...$$`, `\[...\]`, `\(...\)`
+- 🎨 **Встроенный и отображаемый режимы** - Inline и display математика
+- 🌐 **CDN поставка** - Использует jsDelivr для быстрой доставки KaTeX
+- 🚀 **Хук фильтрации парсера** - Интегрируется со стандартным парсером NodeBB
+- 📱 **Адаптивный дизайн** - Работает на мобильных и десктопных устройствах
+- 🌙 **Поддержка тёмной темы** - Автоматически адаптируется к схеме цветов
 
-## Installation
+## Установка
 
-    npm install nodebb-plugin-katex
+1. Переместите папку плагина в `/nodebb/node_modules/`
+2. Активируйте плагин в администраторском панели NodeBB
+3. Перезагрузите NodeBB
 
-## Usage
+```bash
+cd /nodebb/node_modules
+git clone https://github.com/mysteren/nodebb-plugin-katex.git
+cd ../..
+npm install ./node_modules/nodebb-plugin-katex
+node loader.js -r
+```
 
-Just wrap your `tex` code inside your posts using these delimiters:
+## Использование
 
-**Brackets delimiters**
-- `\\(This is \tex code\\)` for inline display.
-- `\\[This is \tex code\\]` for block display.
+### Inline режим (внутри текста)
 
-**Dollars delimiters**
-- `$This is \tex code$` for inline display(optional: disabled by default, must be set in the admin control panel).
-- `$$This is \tex code$$` for block display.
+```
+Уравнение \(E = mc^2\) - очень известное.
+```
 
-## Features
+### Display режим (отдельной строкой)
 
-- Use katex in the server-side to display `tex` code inside posts, summaries and composer preview.
-- Adds a `$` button to the composer toolbar to facilitate usage.
+```
+$$
+\frac{-b \pm \sqrt{b^2 - 4ac}}{2a}
+$$
+```
 
-![nodebb-plugin-katex.png](https://i.imgur.com/nJDqafD.png)
+Или с альтернативными скобками:
 
-## Compatibility
+```
+\[
+\int_{0}^{\infty} e^{-x^2} dx = \frac{\sqrt{\pi}}{2}
+\]
+```
 
-This plugin is compatible with nodebb v0.7.x and above and with the [nodebb-plugin-markdown](https://github.com/julianlam/nodebb-plugin-markdown/) plugin.
+## Архитектура
 
-When used in conjunction with the [nodebb-plugin-markdown](https://github.com/julianlam/nodebb-plugin-markdown/), you have to **load katex plugin after markdown plugin** to enable usage of all buttons of the composer.
+### `lib/index.js`
+Основной модуль плагина с хуками:
+- `parsePost()` - Обработка контента постов
+- `parseRaw()` - Обработка raw текста
+- `onLoad()` - Инициализация при загрузке
 
-## Debugging
+### `static/js/render.js`
+Клиентский скрипт для:
+- Загрузки KaTeX CSS и JS из CDN
+- Ленивой инициализации (только при наличии выражений)
+- Поддержки динамического контента (AJAX)
 
-Katex parsing errors are logged using `winston` the default logger in nodebb at level `verbose`, you need to run `nodebb dev` to see these logs.
+### `static/css/katex.css`
+Дополнительные стили для:
+- Правильного отступа inline выражений
+- Выравнивания display выражений
+- Темной темы
 
-## Credits
+## Технические детали
 
-The code is greatly inspired by those others repositories:
+### Парсинг на сервере
+- Обработка текста на сервере Node.js
+- Встраивание предвычисленного HTML в ответ
+- Минимальная нагрузка на клиента
 
-- [nodebb-plugin-markdown](https://github.com/julianlam/nodebb-plugin-markdown/)
-- [nodebb-plugin-quickstart](https://github.com/julianlam/nodebb-plugin-markdown/)
-- the [auto-render](https://github.com/Khan/KaTeX/blob/master/contrib/auto-render/) extension of the [Katex](https://github.com/Khan/KaTeX/) package.
+### Загрузка на клиенте
+- KaTeX CSS загружается только если обнаружены выражения
+- KaTeX JS загружается из jsDelivr CDN
+- Поддержка динамического контента через AJAX
+
+## Совместимость
+
+- **NodeBB**: 4.0+
+- **Node.js**: 18+
+- **Браузеры**: Все современные браузеры (Chrome, Firefox, Safari, Edge)
+
+## Зависимости
+
+- **katex** (^0.16.27) - Математический парсер KaTeX
+
+## Производительность
+
+- Быстрый парсинг на сервере
+- Ленивая загрузка ресурсов на клиенте
+- Минимальное влияние на загрузку страницы
+- Поддержка кэширования
+
+## Лицензия
+
+MIT
+
+## Автор
+
+Timofey (mysteren)
+
+## Благодарности
+
+- Оригинальный плагин от [Benjamin Abel](https://github.com/benabel/nodebb-plugin-katex)
+- [KaTeX](https://katex.org/) - Быстрый математический парсер от Khan Academy
