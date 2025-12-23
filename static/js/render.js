@@ -120,7 +120,7 @@
 			// const basePath = "/plugins/nodebb-plugin-katex/node_modules/katex/dist/";
 			// Находим правильный путь
 			// Путь к файлам через modules
-			const basePath = "/assets/plugins/nodebb-plugin-katex/katex/";
+			const basePath = "/assets/plugins/nodebb-plugin-katex2/katex/";
 
 			// Параллельная загрузка всех файлов
 			await Promise.all([
