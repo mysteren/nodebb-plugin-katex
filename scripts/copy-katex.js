@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 "use strict";
 
 const fs = require("fs");
@@ -25,25 +26,25 @@ function copyDir(src, dest) {
 function findKatexDist() {
 	const pluginRoot = path.resolve(__dirname, "..");
 
-	// Вариант 1: Локальный node_modules плагина
-	const localPath = path.join(pluginRoot, "node_modules", "katex", "dist");
-	if (fs.existsSync(localPath)) {
-		console.log("[KaTeX] Found in local node_modules");
-		return localPath;
-	}
+	// Все возможные пути поиска
+	const searchPaths = [
+		// 1. Локальный node_modules плагина
+		path.join(pluginRoot, "node_modules", "katex", "dist"),
+		// 2. Hoisted в NodeBB (2 уровня вверх)
+		path.join(pluginRoot, "..", "..", "node_modules", "katex", "dist"),
+		// 3. Hoisted выше (3 уровня)
+		path.join(pluginRoot, "..", "..", "..", "node_modules", "katex", "dist"),
+		// 4. В соседней папке (параллельно плагину)
+		path.join(pluginRoot, "..", "katex", "dist"),
+	];
 
-	// Вариант 2: Hoisted в корень NodeBB (../../node_modules/katex)
-	const hoistedPath = path.join(
-		pluginRoot,
-		"..",
-		"..",
-		"node_modules",
-		"katex",
-		"dist",
-	);
-	if (fs.existsSync(hoistedPath)) {
-		console.log("[KaTeX] Found in hoisted node_modules");
-		return hoistedPath;
+	console.log("[KaTeX] Searching for katex dist...");
+	for (const searchPath of searchPaths) {
+		console.log("  Checking:", searchPath);
+		if (fs.existsSync(searchPath)) {
+			console.log("[KaTeX] ✓ Found at:", searchPath);
+			return searchPath;
+		}
 	}
 
 	return null;
@@ -53,25 +54,37 @@ try {
 	console.log("[KaTeX Plugin] Running postinstall...");
 
 	const pluginRoot = path.resolve(__dirname, "..");
-	const katexSource = findKatexDist();
 	const katexDest = path.join(pluginRoot, "static", "katex");
 
+	// Ищем KaTeX
+	const katexSource = findKatexDist();
+
 	if (!katexSource) {
-		console.error("[KaTeX] ERROR: katex not found!");
-		process.exit(1);
+		console.warn("[KaTeX] WARNING: katex not found!");
+		console.warn("[KaTeX] This is normal during initial npm install.");
+		console.warn(
+			"[KaTeX] Run 'npm rebuild nodebb-plugin-katex2' after installation completes.",
+		);
+		// Не блокируем установку
+		process.exit(0);
 	}
 
+	// Удаляем старую директорию
 	if (fs.existsSync(katexDest)) {
+		console.log("[KaTeX] Removing old directory...");
 		fs.rmSync(katexDest, { recursive: true, force: true });
 	}
 
-	console.log("[KaTeX] Copying from:", katexSource);
-	console.log("[KaTeX] Copying to:", katexDest);
+	// Копируем файлы
+	console.log("[KaTeX] Copying files...");
+	console.log("[KaTeX]   From:", katexSource);
+	console.log("[KaTeX]   To:", katexDest);
 
 	copyDir(katexSource, katexDest);
 
-	console.log("[KaTeX] Postinstall completed!");
+	console.log("[KaTeX] ✓ Postinstall completed!");
 } catch (err) {
-	console.error("[KaTeX] Postinstall failed:", err);
-	process.exit(1);
+	console.error("[KaTeX] ✗ Postinstall failed:", err.message);
+	// Не блокируем установку
+	process.exit(0);
 }
