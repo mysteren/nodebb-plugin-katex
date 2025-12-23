@@ -13,6 +13,6 @@
   "scripts": ["static/js/render.js"],
   "stylesheets": ["static/css/katex.css"],
   "staticDirs": {
-    "katex": "./node_modules/katex/dist"
+    "katex": "./static/katex"
   }
 }

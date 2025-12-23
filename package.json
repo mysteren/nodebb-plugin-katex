@@ -1,6 +1,6 @@
 {
   "name": "nodebb-plugin-katex2",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "KaTeX math rendering plugin for NodeBB",
   "main": "lib/index.js",
   "repository": {
@@ -27,6 +27,7 @@
     "eslint": "^9.35.0"
   },
   "scripts": {
+    "postinstall": "node scripts/copy-katex.js",
     "lint": "eslint lib/ static/js/",
     "fix": "eslint --fix lib/ static/js/"
   },
