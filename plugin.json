@@ -1,26 +1,18 @@
 {
-    "id": "nodebb-plugin-katex",
-    "name": "KaTeX Math Renderer",
-    "description": "Render LaTeX math expressions with KaTeX in NodeBB posts",
-    "url": "https://github.com/mysteren/nodebb-plugin-katex",
-    "library": "lib/index.js",
-    "hooks": [
-        {
-            "hook": "filter:parse.post",
-            "method": "parsePost"
-        },
-        {
-            "hook": "filter:parse.raw",
-            "method": "parseRaw"
-        },
-        {
-            "hook": "static:app.load",
-            "method": "onLoad"
-        }
-    ],
-    "scripts": ["static/js/render.js"],
-    "stylesheets": ["static/css/katex.css"],
-    "staticDirs": {
-        "js": "static/js"
+  "id": "nodebb-plugin-katex2",
+  "name": "KaTeX Math Renderer",
+  "description": "Render LaTeX math expressions with KaTeX in NodeBB posts",
+  "url": "https://github.com/mysteren/nodebb-plugin-katex",
+  "library": "lib/index.js",
+  "hooks": [
+    {
+      "hook": "static:app.load",
+      "method": "init"
     }
+  ],
+  "scripts": ["static/js/render.js"],
+  "stylesheets": ["static/css/katex.css"],
+  "staticDirs": {
+    "katex": "./node_modules/katex/dist"
+  }
 }
