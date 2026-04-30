@@ -1,23 +1,65 @@
 /**
- * Ленивая загрузка и рендеринг KaTeX
- * Библиотека загружается только если на странице есть формулы
+ * Ленивая загрузка и рендеринг KaTeX для NodeBB
+ * Версия 2.0 - исправлены проблемы с SPA-навигацией
  */
 
 (function () {
 	"use strict";
 
-	console.log("Katex render");
+	console.log("[KaTeX] Plugin initialized");
 
-	// Флаги загрузки
+	// === Состояние загрузки ===
 	let katexLoaded = false;
 	let katexLoading = false;
 	let loadCallbacks = [];
 
+	// === Debounce таймеры ===
+	let renderTimer = null;
+	const RENDER_DELAY = 150; // Задержка перед рендерингом (мс)
+
+	// === Регулярное выражение для быстрой проверки ===
+	const MATH_PATTERN = /\$\$|\\\[|\\\(|\$/;
+
 	/**
-	 * Регулярное выражение для поиска формул
-	 * Ищем разделители: $$, \[, \(
+	 * Debounce функция - откладывает выполнение
+	 * @param {Function} func - Функция для выполнения
+	 * @param {number} wait - Задержка в мс
 	 */
-	const MATH_PATTERN = /\$\$|\\\[|\\\(/;
+	function debounce(func, wait) {
+		return function executedFunction() {
+			const context = this;
+			const args = arguments;
+
+			clearTimeout(renderTimer);
+			renderTimer = setTimeout(function () {
+				func.apply(context, args);
+			}, wait);
+		};
+	}
+
+	/**
+	 * Проверка полной загрузки KaTeX
+	 */
+	function isKatexReady() {
+		return (
+			typeof window.katex !== "undefined" &&
+			typeof window.katex.render === "function"
+			// typeof window.renderMathInElement === "function" &&
+			// typeof window.katex.__parse !== "undefined" // внутренняя проверка
+		);
+	}
+
+	/**
+	 * Проверка наличия формул в элементе
+	 * @param {HTMLElement} element
+	 * @returns {boolean}
+	 */
+	function hasFormulas(element) {
+		if (!element) return false;
+
+		// Быстрая проверка через textContent
+		return MATH_PATTERN.test(element.textContent);
+	}
 
 	/**
 	 * Проверка наличия формул на странице
@@ -25,24 +67,25 @@
 	 */
 	function hasMathContent() {
 		// Проверяем в постах
-		const posts = document.querySelectorAll('[component="post/content"]');
-
+		const posts = document.querySelectorAll(
+			'.posts-container [component="post/content"]',
+		);
 		for (let i = 0; i < posts.length; i++) {
-			if (MATH_PATTERN.test(posts[i].textContent)) {
+			if (hasFormulas(posts[i])) {
 				return true;
 			}
 		}
 
 		// Проверяем в превью редактора
 		const preview = document.querySelector(".preview-container");
-		if (preview && MATH_PATTERN.test(preview.textContent)) {
+		if (hasFormulas(preview)) {
 			return true;
 		}
 
-		// Проверяем в заголовках
+		// Проверяем в заголовках тем
 		const titles = document.querySelectorAll('[component="topic/title"]');
 		for (let i = 0; i < titles.length; i++) {
-			if (MATH_PATTERN.test(titles[i].textContent)) {
+			if (hasFormulas(titles[i])) {
 				return true;
 			}
 		}
@@ -51,8 +94,8 @@
 	}
 
 	/**
-	 * Динамическая загрузка CSS файла
-	 * @param {string} href - Путь к CSS файлу
+	 * Загрузка CSS файла
+	 * @param {string} href - Путь к CSS
 	 * @returns {Promise}
 	 */
 	function loadCSS(href) {
@@ -74,16 +117,24 @@
 	}
 
 	/**
-	 * Динамическая загрузка JavaScript файла
-	 * @param {string} src - Путь к JS файлу
+	 * Загрузка JavaScript файла
+	 * @param {string} src - Путь к JS
 	 * @returns {Promise}
 	 */
 	function loadScript(src) {
 		return new Promise(function (resolve, reject) {
-			// Проверяем, не загружен ли уже
+			// Проверяем глобальный объект
+			if (window.renderMathInElement && window.katex) {
+				resolve();
+				return;
+			}
+
+			// Проверяем, не загружен ли уже скрипт
 			const existing = document.querySelector('script[src="' + src + '"]');
 			if (existing) {
-				resolve();
+				// Ждем, пока загрузится
+				existing.onload = resolve;
+				existing.onerror = reject;
 				return;
 			}
 
@@ -96,12 +147,38 @@
 	}
 
 	/**
-	 * Загрузка библиотеки KaTeX (с async/await и параллельной загрузкой)
+	 * Ожидание готовности KaTeX с таймаутом
+	 */
+	function waitForKatex(maxAttempts = 50, interval = 50) {
+		return new Promise((resolve, reject) => {
+			let attempts = 0;
+
+			const check = () => {
+				if (isKatexReady()) {
+					resolve();
+					return;
+				}
+
+				attempts++;
+				if (attempts >= maxAttempts) {
+					reject(new Error("KaTeX did not initialize in time"));
+					return;
+				}
+
+				setTimeout(check, interval);
+			};
+
+			check();
+		});
+	}
+
+	/**
+	 * Загрузка библиотеки KaTeX
 	 * @returns {Promise}
 	 */
 	async function loadKaTeX() {
 		// Если уже загружено
-		if (katexLoaded) {
+		if (katexLoaded && window.renderMathInElement && window.katex) {
 			return;
 		}
 
@@ -116,18 +193,24 @@
 		katexLoading = true;
 
 		try {
-			// Путь к библиотеке в node_modules
-			// const basePath = "/plugins/nodebb-plugin-katex/node_modules/katex/dist/";
-			// Находим правильный путь
-			// Путь к файлам через modules
+			// Правильный путь согласно plugin.json staticDirs
 			const basePath = "/assets/plugins/nodebb-plugin-katex2/katex/";
 
-			// Параллельная загрузка всех файлов
+			await loadScript(basePath + "katex.min.js");
+
+			// 3. Ждем инициализации katex
+			await waitForKatex(10000);
+
+			// Параллельная загрузка всех ресурсов
 			await Promise.all([
 				loadCSS(basePath + "katex.min.css"),
-				loadScript(basePath + "katex.min.js"),
 				loadScript(basePath + "contrib/auto-render.min.js"),
 			]);
+
+			// Проверяем, что библиотека действительно загрузилась
+			if (!window.renderMathInElement || !window.katex) {
+				throw new Error("KaTeX library not available after loading");
+			}
 
 			katexLoaded = true;
 			katexLoading = false;
@@ -140,13 +223,14 @@
 			loadCallbacks = [];
 		} catch (err) {
 			katexLoading = false;
+			katexLoaded = false;
 			console.error("[KaTeX] Failed to load library:", err);
 			throw err;
 		}
 	}
 
 	/**
-	 * Конфигурация KaTeX
+	 * Конфигурация рендеринга KaTeX
 	 */
 	const KATEX_CONFIG = {
 		delimiters: [
@@ -158,14 +242,18 @@
 		errorColor: "#cc0000",
 		strict: false,
 		trust: false,
+		// Игнорируем уже отрендеренные элементы
+		ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
+		ignoredClasses: ["katex", "katex-display", "katex-rendered"],
 	};
 
 	/**
 	 * Очистка HTML-тегов внутри формул
-	 * Markdown может добавить <br>, <p> и другие теги
 	 * @param {HTMLElement} element
 	 */
 	function cleanMathElements(element) {
+		if (!element) return;
+
 		const walker = document.createTreeWalker(
 			element,
 			NodeFilter.SHOW_TEXT,
@@ -176,7 +264,7 @@
 		const nodesToProcess = [];
 		let node;
 
-		// Собираем все текстовые узлы с формулами
+		// Собираем текстовые узлы с формулами
 		while ((node = walker.nextNode())) {
 			const text = node.textContent;
 			if (MATH_PATTERN.test(text)) {
@@ -184,13 +272,20 @@
 			}
 		}
 
-		// Очищаем найденные узлы от HTML
+		// Очищаем от лишних HTML-тегов
 		nodesToProcess.forEach(function (textNode) {
 			let parent = textNode.parentNode;
 
+			// Пропускаем уже отрендеренные элементы
+			if (parent && parent.classList && parent.classList.contains("katex")) {
+				return;
+			}
+
 			if (
 				parent &&
-				(parent.innerHTML.includes("<br") || parent.innerHTML.includes("<p"))
+				(parent.innerHTML.includes("<br") ||
+					parent.innerHTML.includes("<p") ||
+					parent.innerHTML.includes("<span"))
 			) {
 				const cleanText = parent.textContent;
 
@@ -204,28 +299,63 @@
 	/**
 	 * Рендеринг формул в элементе
 	 * @param {HTMLElement} element
+	 * @returns {boolean} - true если что-то отрендерено
 	 */
 	function renderMath(element) {
-		if (!element) return;
+		if (!element || !window.renderMathInElement) {
+			return false;
+		}
+
+		// Проверяем наличие формул
+		if (!hasFormulas(element)) {
+			return false;
+		}
+
+		// Проверяем, не рендерили ли уже этот элемент
+		if (element.hasAttribute("data-katex-rendered")) {
+			return false;
+		}
 
 		try {
-			// Сначала очищаем от HTML-тегов
+			// Очищаем от HTML-тегов
 			cleanMathElements(element);
 
-			// Затем рендерим формулы
-			renderMathInElement(element, KATEX_CONFIG);
+			// Рендерим формулы
+			window.renderMathInElement(element, KATEX_CONFIG);
+
+			// Помечаем как отрендеренный
+			element.setAttribute("data-katex-rendered", "true");
+
+			return true;
 		} catch (err) {
 			console.error("[KaTeX] Render error:", err);
+			return false;
 		}
 	}
 
 	/**
-	 * Рендеринг всех постов (async)
+	 * Сброс флага рендеринга для обновленного контента
+	 * @param {HTMLElement} element
+	 */
+	function markForRerender(element) {
+		if (element && element.hasAttribute("data-katex-rendered")) {
+			element.removeAttribute("data-katex-rendered");
+
+			// Также сбрасываем для вложенных элементов
+			const rendered = element.querySelectorAll("[data-katex-rendered]");
+			rendered.forEach(function (el) {
+				el.removeAttribute("data-katex-rendered");
+			});
+		}
+	}
+
+	/**
+	 * Рендеринг всех постов на странице
 	 */
 	async function renderAllPosts() {
 		// Проверяем наличие формул
 		if (!hasMathContent()) {
-			console.log("[KaTeX] No math content found, skipping");
+			console.log("[KaTeX] No math content found");
 			return;
 		}
 
@@ -233,80 +363,126 @@
 			// Загружаем KaTeX если нужно
 			await loadKaTeX();
 
+			let renderCount = 0;
+
 			// Рендерим посты
 			const posts = document.querySelectorAll('[component="post/content"]');
 			posts.forEach(function (post) {
-				renderMath(post);
+				if (renderMath(post)) {
+					renderCount++;
+				}
 			});
 
-			// Рендерим превью
+			// Рендерим превью редактора
 			const preview = document.querySelector(".preview-container");
 			if (preview) {
 				renderMath(preview);
 			}
 
-			// Рендерим заголовки
+			// Рендерим заголовки тем
 			const titles = document.querySelectorAll('[component="topic/title"]');
 			titles.forEach(function (title) {
 				renderMath(title);
 			});
 
-			console.log("[KaTeX] Rendered " + posts.length + " posts");
+			if (renderCount > 0) {
+				console.log("[KaTeX] Rendered " + renderCount + " new posts");
+			}
 		} catch (err) {
-			console.error("[KaTeX] Failed to render:", err);
+			console.error("[KaTeX] Failed to render posts:", err);
 		}
 	}
 
 	/**
-	 * Инициализация
+	 * Debounced версия рендеринга
+	 */
+	const debouncedRender = debounce(renderAllPosts, RENDER_DELAY);
+
+	/**
+	 * Обработчик для событий навигации
+	 * Критично для SPA-режима NodeBB
+	 */
+	function handleNavigation() {
+		// Сбрасываем все флаги рендеринга при навигации
+		const allPosts = document.querySelectorAll("[data-katex-rendered]");
+		allPosts.forEach(function (post) {
+			post.removeAttribute("data-katex-rendered");
+		});
+
+		// Запускаем рендеринг с задержкой
+		debouncedRender();
+	}
+
+	/**
+	 * Инициализация плагина
 	 */
 	function init() {
-		// Первый рендеринг
-		renderAllPosts();
+		console.log("[KaTeX] Initializing plugin");
 
-		// События NodeBB для динамического контента
+		// Первоначальный рендеринг
+		debouncedRender();
 
-		// Когда загружаются новые посты (скролл, пагинация)
-		window.addEventListener("action:posts.loaded", function () {
-			setTimeout(function () {
-				renderAllPosts();
-			}, 50);
+		// === События NodeBB ===
+
+		// Навигация в SPA (КРИТИЧНО!)
+		$(window).on("action:ajaxify.end", function (event, data) {
+			console.log("[KaTeX] Page navigation detected:", data.url);
+			handleNavigation();
 		});
 
-		// Когда открывается тема
-		window.addEventListener("action:topic.loaded", function () {
-			setTimeout(function () {
-				renderAllPosts();
-			}, 50);
+		// Загрузка новых постов (скролл, пагинация)
+		$(window).on("action:posts.loaded", function (event, data) {
+			console.log("[KaTeX] New posts loaded:", data.posts.length);
+			debouncedRender();
 		});
 
-		// Когда происходит навигация
-		window.addEventListener("action:ajaxify.end", function () {
-			setTimeout(function () {
-				renderAllPosts();
-			}, 100);
+		// Загрузка темы
+		$(window).on("action:topic.loaded", function (event, data) {
+			console.log("[KaTeX] Topic loaded:", data.tid);
+			debouncedRender();
 		});
 
-		// Когда обновляется превью в редакторе
-		window.addEventListener("action:composer.preview", async function () {
+		// Обновление превью в редакторе
+		$(window).on("action:composer.preview", function () {
 			if (hasMathContent()) {
-				try {
-					await loadKaTeX();
-					const preview = document.querySelector(".preview-container");
-					if (preview) {
-						renderMath(preview);
-					}
-				} catch (err) {
-					console.error("[KaTeX] Preview render error:", err);
-				}
+				loadKaTeX()
+					.then(function () {
+						const preview = document.querySelector(".preview-container");
+						if (preview) {
+							markForRerender(preview);
+							renderMath(preview);
+						}
+					})
+					.catch(function (err) {
+						console.error("[KaTeX] Preview render error:", err);
+					});
 			}
+		});
+
+		// Редактирование поста
+		$(window).on("action:posts.edited", function (event, data) {
+			console.log("[KaTeX] Post edited:", data.post.pid);
+			debouncedRender();
+		});
+
+		// Создание нового поста
+		$(window).on("action:posts.loaded", function () {
+			debouncedRender();
 		});
 	}
 
-	// Запуск после загрузки DOM
+	// === Точка входа ===
+
+	// NodeBB использует jQuery, поверяем его наличие
+	// if (typeof $ === "undefined" || typeof jQuery === "undefined") {
+	// 	console.error("[KaTeX] jQuery not found! Plugin may not work correctly.");
+	// }
+
+	// Запуск после полной загрузки
 	if (document.readyState === "loading") {
 		document.addEventListener("DOMContentLoaded", init);
 	} else {
+		// DOM уже загружен
 		init();
 	}
 })();
